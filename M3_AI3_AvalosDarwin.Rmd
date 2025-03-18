@@ -1,0 +1,268 @@
+---
+title: 'MÓDULO 3: Gestión de Datos y Datos Digitales'
+author: "Avalos Darwin"
+date: "17 de Marzo del 2025"
+output:
+  word_document:
+subtitle: 'Preparar datos de Facebook por país Alumno: 11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(pander)
+library(kableExtra)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+options(knitr.kable.NA = '')
+```
+
+# Descripción de la tarea
+
+El objetivo de esta actividad consiste en realizar la preparación de datos inicial para analizar, en fases posteriores, las métricas y mejorar la calidad de los datos.
+
+Los datos a preparar están contenidos en la tabla FACEBOOK_2010_2018_RAW.csv.
+
+* Pais: nombre del país. Un mismo país puede variar su nombre según el indicador.
+* Valor: Valores numéricos. Puede presentar formatos distintos, según el indicador.
+* Indicador: Formato: Año | indicador:
+     *Año: 2010 o 2018.
+     *Indicador:
+        * Facebook: número de usuarios de Facebook en todo el país.   
+        * Internet_por: porcentaje de población usuaria de internet.
+        * poblacion: total de población por país.
+
+# EJERCICIO 1
+```{r}
+
+datosface <- read_delim("F:/Alumno-15/mbdds_fc20/R/Data_Managament/Data_Managament/Facebook_10_18_raw.csv", 
+                    delim = ";", 
+                    col_types = cols(
+                      pais = col_character(),
+                      valor = col_character(),
+                      indicador = col_character()
+                    ),
+                    locale = locale(encoding = "UTF-8"))
+
+head(datosface)
+glimpse(datosface)
+```
+## EJERCICIO 1.1.
+Carga los datos del fichero en un data frame. ¿Por qué no es un conjunto de datos ordenado?
+
+# Se emplea read_delim porque el cvs usa punto y coma (;) como separador.
+
+Respecto a por qué el conjunto de datos no es un conjunto de datos ordenado se debe a que presenta Variables mezcladas en una columna: La columna indicador incluye dos piezas de información (el año y el tipo de indicador) en lugar de tener cada variable en una columna separada. En datos ordenados, cada variable debería estar en su propia columna.
+Otras observaciones del dataset es  en la variable pais ejemplo (Venezuela, RB vs Venezuela o Hong Kong SAR, China vs China) esto se puede deber a diferentes contextos y estándares internacionales utilizados para nombrarlos.
+
+En resumen, para lograr un conjunto de datos ordenado es necesario transformar la estructura actual (por ejemplo, separando la columna Indicador en dos columnas: año e indicador) y unificar el formato de los datos
+
+## EJERCICIO 1.2.
+Separa el año y el “indicador” en dos columnas separadas: anyo, variable. Presenta la tabla de las frecuencias de cada nueva variable.
+Separa el año y el “indicador” en dos columnas separadas: anyo, variable. Presenta la tabla de las frecuencias de cada nueva variable.
+
+```{r}
+# Ver las primeras filas, nombres y estructura del ds
+head(datosface)
+colnames(datosface)
+str(datosface)
+
+```
+
+
+```{r}
+# Separar la columna 'indicador' en 'año' e 'indicador'
+datosface <- datosface %>%
+  separate(indicador, into = c("año", "indicador"), sep = "\\|")
+head(datosface)
+
+```
+
+```{r}
+# Frecuencia para la variable año
+datosface %>%
+  count(año) %>%
+  mutate(
+    Frecuencia_acumulada = cumsum(n), 
+    Frecuencia_relativa =round((n / sum(n) * 100),3),
+    Frecuencia_relativa_acumulada =cumsum(Frecuencia_relativa)
+  )
+
+
+# Frecuencia para la variable indicador
+datosface %>%
+  count(indicador) %>%
+  mutate(
+    Frecuencia_acumulada = cumsum(n), 
+    Frecuencia_relativa = (n / sum(n) * 100),
+    Frecuencia_relativa_acumulada =cumsum(Frecuencia_relativa)
+  )
+
+```
+
+```{r}
+# Verificar resumen de las columnas
+summary(datosface)
+```
+## EJERCICIO 1.3.
+Codifica el nombre de los países en una nueva columna “pais_r” donde, al analizar la tabla de frecuencias cada país, tenga frecuencia 6.
+
+```{r}
+# Frecuencia de los países en la columna pais
+frecuencia_paises <- table(datosface$pais)
+
+# Mostrar la tabla de frecuencias de los países
+print(frecuencia_paises)
+
+datosface %>%
+  count(pais) %>%
+  filter(n != 6)
+
+```
+
+
+```{r}
+datosface <- datosface %>%
+  mutate(pais = case_when(
+    pais %in% c("Arab Rep. Egypt", "Egypt, Arab Rep.") ~ "Arab Rep. Egypt",
+    pais %in% c("Rep. Yemen", "Yemen, Rep.") ~ "Rep. Yemen",
+    pais %in% c("Russian", "Russian Federation") ~ "Russian",
+    
+    TRUE ~ pais  # mantener sin cambios si no estan en la lista
+  ))
+
+datosface %>%
+  count(pais) %>%
+  filter(n != 6)
+```
+
+```{r}
+# Filtrar los países que tienen frecuencia 6
+paises_frecuencia_6 <- names(frecuencia_paises[frecuencia_paises == 6])
+
+# Mostrar los países que tienen frecuencia 6
+print(paises_frecuencia_6)
+```
+
+```{r}
+# Crear una nueva columna 'pais_r' codificando los países con frecuencia 6
+datosface$pais_r <- ifelse(datosface$pais %in% paises_frecuencia_6, datosface$pais, "Otro Pais")
+head(datosface)
+```
+
+```{r}
+# Verificar las frecuencias de la nueva columna 'pais_r'
+frecuencia_pais_r <- table(datosface$pais_r)
+
+# Mostrar la tabla de frecuencias de 'pais_r'
+print(frecuencia_pais_r)
+```
+
+## EJERCICIO 1.4.
+Pivota la tabla a formato wide de forma que cada variable tenga su propia columna y cada país dos filas (una para cada año). Comenta la estructura de la tabla (glimpse).
+
+```{r}
+# Verificar la variable inicial 
+summary(datosface$valor)
+# Ver los valores que no son numéricos en la columna 'valor'
+datosface[!grepl("^\\d*\\.?\\d+$", datosface$valor), ]
+```
+
+```{r}
+# Pivotar los datos a formato wide
+df_face_wide <- datosface %>%
+  pivot_wider(names_from = indicador, values_from = valor)
+
+# Primeras filas del df pivoteado
+head(df_face_wide)
+
+```
+
+```{r}
+# glimpse()
+glimpse(df_face_wide)
+
+```
+glimpse()
+Devuelve una descripción global del conjunto de datos, para el caso devuelve que el df tiene 156 filas (observaciones) con 6 columnas (variables), el nombre y tipo de datos de cada variable y muestra algunos valores de las 6 variables que conforman el ds.Cada variable (Internet_por, Facebook, poblacion) tiene su propia columna.
+## EJERCICIO 1.5.
+Transforma las tres variables (Facebook, Internet_por, poblacion) a formato numérico en tres variables nuevas con el sufijo “\_num”. Aplica antes la/s transformación/es de las variables de texto que creas conveniente. Presenta el summary de las variables nuevas.
+
+```{r}
+df_face_wide <- df_face_wide %>%
+  mutate(
+    Facebook_num = as.numeric(gsub(",", "", trimws(Facebook))),
+    Internet_por_num = as.numeric(gsub(",", ".", trimws(Internet_por))),
+    poblacion_num = as.numeric(gsub(",", "", trimws(poblacion)))
+  )
+
+summary(df_face_wide[, c("Facebook_num", "Internet_por_num", "poblacion_num")])
+str(df_face_wide[, c("Facebook_num", "Internet_por_num", "poblacion_num")])
+head(df_face_wide[, c("Facebook", "Facebook_num", "Internet_por", "Internet_por_num", "poblacion", "poblacion_num")], 15)
+
+
+```
+
+```{r}
+df_face_wide <- df_face_wide %>%
+  mutate(
+    poblacion_clean = gsub("[^0-9.]", "", trimws(poblacion)),
+    poblacion_num = as.numeric(poblacion_clean)
+  )
+
+
+head(df_face_wide[, c("poblacion", "poblacion_clean", "poblacion_num")], 15)
+
+summary(df_face_wide$poblacion_num)
+
+df_face_wide %>% filter(is.na(poblacion_num)) %>% select(pais, año, poblacion, poblacion_clean)
+
+df_face_wide <- df_face_wide %>%
+  mutate(
+    facebook_num = as.numeric(gsub(",", "", Facebook)),
+    internet_por_num = as.numeric(gsub(",", "", Internet_por)),
+    poblacion_num = as.numeric(gsub(",", "", poblacion))
+  )
+
+summary(select(df_face_wide, facebook_num, internet_por_num, poblacion_num))
+
+```
+
+```{r}
+
+# Revisión de los valores nulos en las variables.
+colSums(is.na(df_face_wide[, c("Facebook_num", "Internet_por_num", "poblacion_num")]))
+```
+
+## EJERCICIO 1.6.
+6. Analiza y comenta si observas alguna otra inconsistencia en los datos preparados.
+Aunque los datos han sido parcialmente limpiados y transformados, aún persisten varias inconsistencias que deben abordarse antes de realizar análisis avanzados. Las principales áreas de mejora incluyen:
+
+Manejo de valores faltantes NaNs.hace falta la estandarización de formatos numéricos y de población porque presenta un formato numérico ambiguo valores como por ejemplo 23,3 (con coma decimal) y 23.580,08 (formato europeo con punto de mil) requieren limpieza
+Unificación de nombres de países que siguen sin estar estadarizados en la variable Otro Pais 18 observaciones.
+
+## EJERCICIO 1.7.
+7. Escribe cuatro líneas explicando (para un lector no técnico) la penetración de Facebook y de Internet en España.
+En base a la data:
+
+Data df:
+"Spain";"65,8";"2010|Internet_por"
+"Spain";"86,10723553";"2018|Internet_por"
+"Spain";"  46576  ";"2010|poblacion"
+"Spain";"  46723  ";"2018|poblacion"
+"Spain";"10610080";"2010|Facebook"
+"Spain";"23000000";"2018|Facebook"
+
+Interpretacion:
+* Acceso a internet (2010): "65,8"---> 65.8% de la población tenía acceso a internet.*
+* Acceso a internet (2018): "86,10723553"---> 86.1% de la población tenía acceso a internet.
+* Población (2010): " 46576 "---> 46,576 (en miles o millones, dependiendo de la unidad).
+* Población (2018): " 46723 " ---> 46,723 (en miles o millones).
+* Usuarios de Facebook (2010): "10610080" ---> 10.6 millones de usuarios.
+* Usuarios de Facebook (2018): "23000000" ---> 23 millones de usuarios.
+
+
+En 2010, España tenía un 65.8% de penetración de internet y 10.6 millones de usuarios de Facebook , lo que refleja una adopción digital en crecimiento.Para 2018, la penetración de internet aumentó al 86.1% , y los usuarios de facebook casi se duplicaron, alcanzando 23 millones.
+
